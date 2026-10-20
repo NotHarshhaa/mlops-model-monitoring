@@ -1,0 +1,66 @@
+groups:
+  - name: mlops-service-health
+    rules:
+      - alert: MLOpsApiHighErrorRate
+        expr: |
+          sum(rate(mlops_api_requests_total{status=~"5.."}[5m]))
+          /
+          clamp_min(sum(rate(mlops_api_requests_total[5m])), 0.001)
+          > 0.05
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Inference API error rate is above 5%"
+          description: "5xx responses have exceeded 5% of requests for 5 minutes."
+
+      - alert: MLOpsApiHighLatency
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum(rate(mlops_api_request_duration_seconds_bucket[5m])) by (le)
+          ) > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Inference API p95 latency is above 1s"
+          description: "95th percentile request latency has exceeded 1 second for 5 minutes."
+
+      - alert: MLOpsModelNotLoaded
+        expr: mlops_model_loaded == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "No model artifact is loaded"
+          description: "The inference API reports that no model is available."
+
+  - name: mlops-model-monitoring
+    rules:
+      - alert: MLOpsDataDriftDetected
+        expr: max(mlops_drift_share) >= 0.3
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Feature data drift detected"
+          description: "At least 30% of monitored features exceed the PSI threshold. Confirm whether performance has degraded before retraining."
+
+      - alert: MLOpsPerformanceDegradation
+        expr: max(mlops_performance_drop) > 0.1
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Production model performance has degraded"
+          description: "A tracked metric has dropped more than 10% relative to the baseline."
+
+      - alert: MLOpsMonitoringStale
+        expr: time() - max(mlops_monitoring_last_run_timestamp_seconds) > 86400
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Monitoring has not run in over 24 hours"
+          description: "The last monitoring run is older than expected. Check the scheduled job."

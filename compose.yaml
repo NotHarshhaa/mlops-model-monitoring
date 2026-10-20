@@ -1,0 +1,99 @@
+name: mlops-model-monitoring
+
+services:
+  api:
+    build: .
+    image: mlops-model-monitoring:local
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      APP_ENV: container
+      MODEL_PATH: /app/artifacts/model
+      REFERENCE_DATA_PATH: /app/data/reference.csv
+      PREDICTION_LOG_PATH: /app/artifacts/predictions.jsonl
+      LABELS_PATH: /app/data/labels.jsonl
+      DRIFT_REPORT_PATH: /app/reports/drift-report.html
+      MONITORING_REPORT_PATH: /app/reports/monitoring-report.json
+      MONITORING_METRICS_PATH: /app/reports/monitoring.prom
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./artifacts:/app/artifacts
+      - ./data:/app/data
+      - ./reports:/app/reports
+    depends_on:
+      mlflow:
+        condition: service_started
+    restart: unless-stopped
+
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v3.17.1
+    command:
+      - mlflow
+      - server
+      - --host
+      - 0.0.0.0
+      - --port
+      - "5000"
+      - --backend-store-uri
+      - sqlite:////mlflow/mlflow.db
+      - --artifacts-destination
+      - /mlflow/artifacts
+      - --allowed-hosts
+      - mlflow,mlflow:5000,api,api:5000,localhost,localhost:5000,127.0.0.1,127.0.0.1:5000
+    ports:
+      - "5000:5000"
+    volumes:
+      - mlflow-data:/mlflow
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --web.enable-lifecycle
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus-data:/prometheus
+    depends_on:
+      - api
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:11.3.0
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+  node-exporter:
+    image: prom/node-exporter:v1.8.2
+    command:
+      - --collector.textfile.directory=/var/lib/node_exporter/textfile_collector
+      - --no-collector.arp
+      - --no-collector.bcache
+    ports:
+      - "9100:9100"
+    volumes:
+      - ./reports:/var/lib/node_exporter/textfile_collector:ro
+    restart: unless-stopped
+
+volumes:
+  mlflow-data:
+  prometheus-data:
+  grafana-data:

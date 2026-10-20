@@ -1,0 +1,59 @@
+name: Retrain
+
+on:
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Save the best candidate even if evaluation gates fail"
+        required: false
+        default: false
+        type: boolean
+  schedule:
+    # Weekly retraining candidate. A human still reviews the artifact.
+    - cron: "0 3 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  train:
+    name: Train candidate model
+    runs-on: ubuntu-latest
+    # Configure required reviewers on this GitHub environment before enabling
+    # any automated promotion. This workflow publishes candidates only.
+    environment: model-training
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Train and evaluate
+        run: |
+          python scripts/train.py --no-mlflow ${{ inputs.force && '--force' || '' }}
+
+      - name: Upload candidate artifact and evaluation
+        uses: actions/upload-artifact@v4
+        with:
+          name: candidate-model
+          path: |
+            artifacts/model/
+            data/reference.csv
+            reports/evaluation.json
+            reports/training-summary.json
+          retention-days: 14
+
+      - name: Upload test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-report
+          path: reports/
+          retention-days: 7

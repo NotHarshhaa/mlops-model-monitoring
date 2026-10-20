@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+.python-version
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Tooling caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# MLflow local tracking
+mlruns/
+mlartifacts/
+
+# Data and generated artifacts
+data/*.csv
+data/*.jsonl
+data/*.parquet
+artifacts/*
+!artifacts/.gitkeep
+reports/*
+!reports/.gitkeep
+
+# Operating system and editors
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
